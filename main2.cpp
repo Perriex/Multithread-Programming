@@ -104,12 +104,11 @@ void *getPixs(void *threadarg)
     count += args->extra;
     for (int j = cols - 1; j >= 0; j--)
     {
-      pic[i][j][0] = (unsigned char)args->fileReadBuffer[args->end - count];
-      count++;
-      pic[i][j][1] = (unsigned char)args->fileReadBuffer[args->end - count];
-      count++;
-      pic[i][j][2] = (unsigned char)args->fileReadBuffer[args->end - count];
-      count++;
+      for (int k = 0; k < 3; k++)
+      {
+        pic[i][j][k] = (unsigned char)args->fileReadBuffer[args->end - count];
+        count++;
+      }
     }
   }
   pthread_exit(NULL);
