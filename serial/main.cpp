@@ -3,17 +3,9 @@
 #include <fstream>
 #include <vector>
 #include <chrono>
-#include <cstdlib>
-#include <stdio.h>
-#include <pthread.h>
 
 using namespace std::chrono;
 using namespace std;
-
-#define NUM_THREADS_READ 5
-#define NUM_THREADS_SMOOTH 6
-#define NUM_THREADS_SEPIA 5
-#define NUM_THREADS_MEAN 8
 
 using std::cout;
 using std::endl;
@@ -87,123 +79,73 @@ bool fillAndAllocate(char *&buffer, const char *fileName, int &rows, int &cols, 
   }
 }
 
-struct getPixsArgs
-{
-  int count, row, maxR, extra, end, id;
-  char *fileReadBuffer;
-};
-
-void *getPixs(void *threadarg)
-{
-  struct getPixsArgs *args;
-  args = (struct getPixsArgs *)threadarg;
-  int count = args->count;
-
-  for (int i = args->row; i < args->maxR; i++)
-  {
-    count += args->extra;
-    for (int j = cols - 1; j >= 0; j--)
-    {
-      for (int k = 0; k < 3; k++)
-      {
-        pic[i][j][k] = (unsigned char)args->fileReadBuffer[args->end - count];
-        count++;
-      }
-    }
-  }
-  pthread_exit(NULL);
-}
-
-void threading(int num, int end, void *(*func)(void *), char *buf = new char[0])
-{
-  pthread_t threads[num];
-  struct getPixsArgs td[num + 1];
-  int rc;
-  int parts = rows / num;
-  int start = 0;
-  int extra = cols % 4;
-  int i;
-  for (i = 0; i < num; i++)
-  {
-    td[i].end = end;
-    td[i].extra = extra;
-    td[i].row = start;
-    td[i].maxR = start + parts;
-    start += parts;
-    td[i].count = cols * i * parts * 3 + 1;
-    td[i].fileReadBuffer = buf;
-    rc = pthread_create(&threads[i], NULL, func, (void *)&td[i]);
-    if (rc)
-    {
-      cout << "Error:unable to create thread," << rc << endl;
-      exit(-1);
-    }
-  }
-
-  if (rows % num != 0)
-  {
-    pthread_t thread;
-
-    td[i].end = end;
-    td[i].extra = extra;
-    td[i].row = start;
-    td[i].maxR = start + (rows % num);
-    start += parts;
-    td[i].count = cols * i * parts * 3 + 1;
-    td[i].fileReadBuffer = buf;
-    rc = pthread_create(&thread, NULL, func, (void *)&td[i]);
-    if (rc)
-    {
-      cout << "Error:unable to create thread," << rc << endl;
-      exit(-1);
-    }
-    pthread_join(thread, NULL);
-  }
-  for (int i = 0; i < num; ++i)
-  {
-    pthread_join(threads[i], NULL);
-  }
-}
-
 void getPixlesFromBMP24(int end, int rows, int cols, char *fileReadBuffer)
 {
-  threading(NUM_THREADS_READ, end, getPixs, fileReadBuffer);
-}
-char *c;
-
-void *setPixs(void *threadarg)
-{
-  struct getPixsArgs *args;
-  args = (struct getPixsArgs *)threadarg;
-  int count = args->count;
-
-  for (int i = args->row; i < args->maxR; i++)
+  int count = 1;
+  int extra = cols % 4;
+  for (int i = 0; i < rows; i++)
   {
-    count += args->extra;
+    count += extra;
     for (int j = cols - 1; j >= 0; j--)
-    {
-      c[args->end - count] = (unsigned char)out[i][j][0];
-      count++;
-      c[args->end - count] = (unsigned char)out[i][j][1];
-      count++;
-      c[args->end - count] = (unsigned char)out[i][j][2];
-      count++;
-    }
+      for (int k = 0; k < 3; k++)
+      {
+        switch (k)
+        {
+        case 0:
+          // fileReadBuffer[end - count] is the red value
+          pic[i][j][k] = (unsigned char)fileReadBuffer[end - count];
+          break;
+        case 1:
+          // fileReadBuffer[end - count] is the green value
+          pic[i][j][k] = (unsigned char)fileReadBuffer[end - count];
+          break;
+        case 2:
+          // fileReadBuffer[end - count] is the blue value
+          pic[i][j][k] = (unsigned char)fileReadBuffer[end - count];
+          break;
+          // go to the next position in the buffer
+        }
+        count++;
+      }
   }
-  pthread_exit(NULL);
 }
 
 void writeOutBmp24(char *fileBuffer, const char *nameOfFileToCreate, int bufferSize)
 {
-  c = fileBuffer;
   std::ofstream write(nameOfFileToCreate);
   if (!write)
   {
     cout << "Failed to write " << nameOfFileToCreate << endl;
     return;
   }
-  threading(NUM_THREADS_READ, bufferSize, setPixs, c);
-  write.write(c, bufferSize);
+  int count = 1;
+  int extra = cols % 4;
+  for (int i = 0; i < rows; i++)
+  {
+    count += extra;
+    for (int j = cols - 1; j >= 0; j--)
+      for (int k = 0; k < 3; k++)
+      {
+        switch (k)
+        {
+        case 0:
+          // write red value in fileBuffer[bufferSize - count]
+          fileBuffer[bufferSize - count] = (unsigned char)out[i][j][k];
+          break;
+        case 1:
+          // write green value in fileBuffer[bufferSize - count]
+          fileBuffer[bufferSize - count] = (unsigned char)out[i][j][k];
+          break;
+        case 2:
+          // write blue value in fileBuffer[bufferSize - count]
+          fileBuffer[bufferSize - count] = (unsigned char)out[i][j][k];
+          break;
+          // go to the next position in the buffer
+        }
+        count++;
+      }
+  }
+  write.write(fileBuffer, bufferSize);
 }
 
 short mean_neighbers(int i, int j, int k)
@@ -219,26 +161,17 @@ short mean_neighbers(int i, int j, int k)
   return sum;
 }
 
-void *smooth(void *threadarg)
-{
-  struct getPixsArgs *args;
-  args = (struct getPixsArgs *)threadarg;
-  for (int i = args->row; i < args->maxR; i++)
-    for (int j = 0; j < cols; j++)
-      for (int k = 0; k < 3; k++)
-        out[i][j][k] = mean_neighbers(i, j, k);
-
-  pthread_exit(NULL);
-}
-
 void smoothing()
 {
-  threading(NUM_THREADS_SMOOTH, 0, smooth);
+  for (int i = 0; i < rows; i++)
+    for (int j = 0; j < cols; j++)
+    {
+      out[i][j][0] = mean_neighbers(i, j, 0);
+      out[i][j][1] = mean_neighbers(i, j, 1);
+      out[i][j][2] = mean_neighbers(i, j, 2);
+    }
 }
 
-float mean_red = 0;
-float mean_blue = 0;
-float mean_green = 0;
 void sepia()
 {
   for (int i = 0; i < rows; i++)
@@ -255,58 +188,49 @@ void sepia()
       pic[i][j][2] = (0.272 * out[i][j][0]) + (0.534 * out[i][j][1]) + (0.131 * out[i][j][2]);
       if (pic[i][j][2] >= 255)
         pic[i][j][2] = 255;
+    }
+}
+
+void overall_mean()
+{
+  float mean_red = 0, mean_green = 0, mean_blue = 0;
+  for (int i = 0; i < rows; i++)
+    for (int j = 0; j < cols; j++)
+    {
       mean_red += pic[i][j][0];
       mean_green += pic[i][j][1];
       mean_blue += pic[i][j][2];
     }
-}
+  mean_red /= rows * cols;
+  mean_green /= rows * cols;
+  mean_blue /= rows * cols;
 
-void *mean(void *threadarg)
-{
-  struct getPixsArgs *args;
-  args = (struct getPixsArgs *)threadarg;
-
-  for (int i = args->row; i < args->maxR; i++)
-  {
+  for (int i = 0; i < rows; i++)
     for (int j = 0; j < cols; j++)
     {
       out[i][j][0] = pic[i][j][0] * 0.4 + mean_red * 0.6;
       out[i][j][1] = pic[i][j][1] * 0.4 + mean_green * 0.6;
       out[i][j][2] = pic[i][j][2] * 0.4 + mean_blue * 0.6;
     }
-  }
-  pthread_exit(NULL);
 }
-
-void overall_mean()
-{
-  mean_red /= rows * cols;
-  mean_green /= rows * cols;
-  mean_blue /= rows * cols;
-  threading(NUM_THREADS_MEAN, 0, mean);
-}
-
 void cross()
 {
   for (int i = 0; i < rows; i++)
     for (int j = 0; j < cols; j++)
     {
-      if (j == i || j == (cols - i))
+      for (int k = 0; k <= 2; k++)
       {
-        out[i][j][0] = 255.0;
-        out[i][j][1] = 255.0;
-        out[i][j][2] = 255.0;
-        if (i != 0)
+        if (j == i || j == (cols - i))
         {
-          out[i - 1][j][0] = 255.0;
-          out[i - 1][j][1] = 255.0;
-          out[i - 1][j][2] = 255.0;
-        }
-        if (i != rows - 1)
-        {
-          out[i + 1][j][0] = 255.0;
-          out[i + 1][j][1] = 255.0;
-          out[i + 1][j][2] = 255.0;
+          out[i][j][k] = 255.0;
+          if (i != 0)
+          {
+            out[i - 1][j][k] = 255.0;
+          }
+          if (i != rows - 1)
+          {
+            out[i + 1][j][k] = 255.0;
+          }
         }
       }
     }
@@ -323,46 +247,48 @@ int main(int argc, char *argv[])
     cout << "File read error" << endl;
     return 1;
   }
+
+  // read input file
   auto start = high_resolution_clock::now();
   getPixlesFromBMP24(bufferSize, rows, cols, fileBuffer);
   auto stop = high_resolution_clock::now();
   auto duration = duration_cast<microseconds>(stop - start);
-  cout << "read picture:" << duration.count() << endl;
+  //cout << "read picture:" << duration.count() << endl;
 
   // apply filters
   start = high_resolution_clock::now();
   smoothing();
   stop = high_resolution_clock::now();
   duration = duration_cast<microseconds>(stop - start);
-  cout << "smoothing: " << duration.count() << endl;
+  //cout << "smoothing: " << duration.count() << endl;
 
   start = high_resolution_clock::now();
   sepia();
   stop = high_resolution_clock::now();
   duration = duration_cast<microseconds>(stop - start);
-  cout << "sepia: " << duration.count() << endl;
+  //cout << "sepia: " << duration.count() << endl;
 
   start = high_resolution_clock::now();
   overall_mean();
   stop = high_resolution_clock::now();
   duration = duration_cast<microseconds>(stop - start);
-  cout << "mean: " << duration.count() << endl;
+  //cout << "mean: " << duration.count() << endl;
 
   start = high_resolution_clock::now();
   cross();
   stop = high_resolution_clock::now();
   duration = duration_cast<microseconds>(stop - start);
-  cout << "cross: " << duration.count() << endl;
+  //cout << "cross: " << duration.count() << endl;
   // write output file
   start = high_resolution_clock::now();
   writeOutBmp24(fileBuffer, "output.bmp", bufferSize);
   stop = high_resolution_clock::now();
   duration = duration_cast<microseconds>(stop - start);
-  cout << "write pic:" << duration.count() << endl;
+  //cout << "write pic:" << duration.count() << endl;
   auto last = high_resolution_clock::now();
 
   auto milliseconds = chrono::duration_cast<chrono::milliseconds>(last - first);
-  cout << "overall: " << milliseconds.count() << endl;
+  cout << "Speedup: " << milliseconds.count() << endl;
 
   return 0;
 }
