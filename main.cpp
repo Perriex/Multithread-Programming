@@ -245,21 +245,17 @@ int main(int argc, char *argv[])
   int bufferSize;
   char *fileName = argv[1];
   auto first = high_resolution_clock::now();
-  auto start = high_resolution_clock::now();
   if (!fillAndAllocate(fileBuffer, fileName, rows, cols, bufferSize))
   {
     cout << "File read error" << endl;
     return 1;
   }
-  auto stop = high_resolution_clock::now();
-  auto duration = duration_cast<microseconds>(stop - start);
-  cout << "findAndAllocate: " << duration.count() << endl;
 
   // read input file
-  start = high_resolution_clock::now();
+  auto start = high_resolution_clock::now();
   getPixlesFromBMP24(bufferSize, rows, cols, fileBuffer);
-  stop = high_resolution_clock::now();
-  duration = duration_cast<microseconds>(stop - start);
+  auto stop = high_resolution_clock::now();
+  auto duration = duration_cast<microseconds>(stop - start);
   cout << "read picture:" << duration.count() << endl;
 
   // apply filters
