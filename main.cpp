@@ -204,6 +204,7 @@ void overall_mean()
   mean_red /= rows * cols;
   mean_green /= rows * cols;
   mean_blue /= rows * cols;
+
   for (int i = 0; i < rows; i++)
     for (int j = 0; j < cols; j++)
     {
@@ -212,28 +213,24 @@ void overall_mean()
       out[i][j][2] = pic[i][j][2] * 0.4 + mean_blue * 0.6;
     }
 }
-
 void cross()
 {
   for (int i = 0; i < rows; i++)
     for (int j = 0; j < cols; j++)
     {
-      if (j == i || j == (cols - i))
+      for (int k = 0; k <= 2; k++)
       {
-        out[i][j][0] = 255.0;
-        out[i][j][1] = 255.0;
-        out[i][j][2] = 255.0;
-        if (i != 0)
+        if (j == i || j == (cols - i))
         {
-          out[i - 1][j][0] = 255.0;
-          out[i - 1][j][1] = 255.0;
-          out[i - 1][j][2] = 255.0;
-        }
-        if (i != rows - 1)
-        {
-          out[i + 1][j][0] = 255.0;
-          out[i + 1][j][1] = 255.0;
-          out[i + 1][j][2] = 255.0;
+          out[i][j][k] = 255.0;
+          if (i != 0)
+          {
+            out[i - 1][j][k] = 255.0;
+          }
+          if (i != rows - 1)
+          {
+            out[i + 1][j][k] = 255.0;
+          }
         }
       }
     }

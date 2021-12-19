@@ -11,9 +11,9 @@ using namespace std::chrono;
 using namespace std;
 
 #define NUM_THREADS_READ 5
-#define NUM_THREADS_SMOOTH 5
+#define NUM_THREADS_SMOOTH 6
 #define NUM_THREADS_SEPIA 5
-#define NUM_THREADS_MEAN 5
+#define NUM_THREADS_MEAN 8
 
 using std::cout;
 using std::endl;
@@ -115,16 +115,16 @@ void *getPixs(void *threadarg)
   pthread_exit(NULL);
 }
 
-void getPixlesFromBMP24(int end, int rows, int cols, char *fileReadBuffer)
+void threading(int num, int end, void *(*func)(void *), char *buf = new char[0])
 {
-  pthread_t threads[NUM_THREADS_READ];
-  struct getPixsArgs td[NUM_THREADS_READ + 1];
+  pthread_t threads[num];
+  struct getPixsArgs td[num + 1];
   int rc;
-  int parts = rows / NUM_THREADS_READ;
+  int parts = rows / num;
   int start = 0;
   int extra = cols % 4;
   int i;
-  for (i = 0; i < NUM_THREADS_READ; i++)
+  for (i = 0; i < num; i++)
   {
     td[i].end = end;
     td[i].extra = extra;
@@ -132,8 +132,8 @@ void getPixlesFromBMP24(int end, int rows, int cols, char *fileReadBuffer)
     td[i].maxR = start + parts;
     start += parts;
     td[i].count = cols * i * parts * 3 + 1;
-    td[i].fileReadBuffer = fileReadBuffer;
-    rc = pthread_create(&threads[i], NULL, getPixs, (void *)&td[i]);
+    td[i].fileReadBuffer = buf;
+    rc = pthread_create(&threads[i], NULL, func, (void *)&td[i]);
     if (rc)
     {
       cout << "Error:unable to create thread," << rc << endl;
@@ -141,18 +141,18 @@ void getPixlesFromBMP24(int end, int rows, int cols, char *fileReadBuffer)
     }
   }
 
-  if (rows % NUM_THREADS_READ != 0)
+  if (rows % num != 0)
   {
     pthread_t thread;
 
     td[i].end = end;
     td[i].extra = extra;
     td[i].row = start;
-    td[i].maxR = start + (rows % NUM_THREADS_READ);
+    td[i].maxR = start + (rows % num);
     start += parts;
     td[i].count = cols * i * parts * 3 + 1;
-    td[i].fileReadBuffer = fileReadBuffer;
-    rc = pthread_create(&thread, NULL, getPixs, (void *)&td[i]);
+    td[i].fileReadBuffer = buf;
+    rc = pthread_create(&thread, NULL, func, (void *)&td[i]);
     if (rc)
     {
       cout << "Error:unable to create thread," << rc << endl;
@@ -160,48 +160,51 @@ void getPixlesFromBMP24(int end, int rows, int cols, char *fileReadBuffer)
     }
     pthread_join(thread, NULL);
   }
-  for (int i = 0; i < NUM_THREADS_READ; ++i)
+  for (int i = 0; i < num; ++i)
   {
     pthread_join(threads[i], NULL);
   }
 }
 
+void getPixlesFromBMP24(int end, int rows, int cols, char *fileReadBuffer)
+{
+  threading(NUM_THREADS_READ, end, getPixs, fileReadBuffer);
+}
+char *c;
+
+void *setPixs(void *threadarg)
+{
+  struct getPixsArgs *args;
+  args = (struct getPixsArgs *)threadarg;
+  int count = args->count;
+
+  for (int i = args->row; i < args->maxR; i++)
+  {
+    count += args->extra;
+    for (int j = cols - 1; j >= 0; j--)
+    {
+      c[args->end - count] = (unsigned char)out[i][j][0];
+      count++;
+      c[args->end - count] = (unsigned char)out[i][j][1];
+      count++;
+      c[args->end - count] = (unsigned char)out[i][j][2];
+      count++;
+    }
+  }
+  pthread_exit(NULL);
+}
+
 void writeOutBmp24(char *fileBuffer, const char *nameOfFileToCreate, int bufferSize)
 {
+  c = fileBuffer;
   std::ofstream write(nameOfFileToCreate);
   if (!write)
   {
     cout << "Failed to write " << nameOfFileToCreate << endl;
     return;
   }
-  int count = 1;
-  int extra = cols % 4;
-  for (int i = 0; i < rows; i++)
-  {
-    count += extra;
-    for (int j = cols - 1; j >= 0; j--)
-      for (int k = 0; k < 3; k++)
-      {
-        switch (k)
-        {
-        case 0:
-          // write red value in fileBuffer[bufferSize - count]
-          fileBuffer[bufferSize - count] = (unsigned char)out[i][j][k];
-          break;
-        case 1:
-          // write green value in fileBuffer[bufferSize - count]
-          fileBuffer[bufferSize - count] = (unsigned char)out[i][j][k];
-          break;
-        case 2:
-          // write blue value in fileBuffer[bufferSize - count]
-          fileBuffer[bufferSize - count] = (unsigned char)out[i][j][k];
-          break;
-          // go to the next position in the buffer
-        }
-        count++;
-      }
-  }
-  write.write(fileBuffer, bufferSize);
+  threading(NUM_THREADS_READ, bufferSize, setPixs, c);
+  write.write(c, bufferSize);
 }
 
 short mean_neighbers(int i, int j, int k)
@@ -212,7 +215,7 @@ short mean_neighbers(int i, int j, int k)
   float sum = 0.0;
   for (int p = -1; p <= 1; p++)
     for (int q = -1; q <= 1; q++)
-      sum += pic[i - p][j - q][k];
+      sum += pic[i - p][j - q][k] / 9;
 
   return sum;
 }
@@ -224,54 +227,19 @@ void *smooth(void *threadarg)
   for (int i = args->row; i < args->maxR; i++)
     for (int j = 0; j < cols; j++)
       for (int k = 0; k < 3; k++)
-        out[i][j][k] = mean_neighbers(i, j, k) / 9;
+        out[i][j][k] = mean_neighbers(i, j, k);
 
   pthread_exit(NULL);
 }
 
 void smoothing()
 {
-  pthread_t threads[NUM_THREADS_SMOOTH];
-  struct getPixsArgs td[NUM_THREADS_SMOOTH + 1];
-  int rc;
-  int parts = rows / (NUM_THREADS_SMOOTH);
-  int start = 0;
-  int i;
-  for (i = 0; i < NUM_THREADS_SMOOTH; i++)
-  {
-    td[i].row = start;
-    td[i].maxR = start + parts;
-    start += parts;
-    rc = pthread_create(&threads[i], NULL, smooth, (void *)&td[i]);
-    if (rc)
-    {
-      cout << "Error:unable to create thread," << rc << endl;
-      exit(-1);
-    }
-  }
-
-  if (rows % (NUM_THREADS_SMOOTH) != 0)
-  {
-    pthread_t thread;
-
-    td[i].row = start;
-    td[i].maxR = start + (rows % (NUM_THREADS_SMOOTH));
-    start += parts;
-    td[i].count = cols * i * parts * 3 + 1;
-    rc = pthread_create(&thread, NULL, getPixs, (void *)&td[i]);
-    if (rc)
-    {
-      cout << "Error:unable to create thread," << rc << endl;
-      exit(-1);
-    }
-    pthread_join(thread, NULL);
-  }
-  for (int i = 0; i < NUM_THREADS_SMOOTH; ++i)
-  {
-    pthread_join(threads[i], NULL);
-  }
+  threading(NUM_THREADS_SMOOTH, 0, smooth);
 }
 
+float mean_red = 0;
+float mean_blue = 0;
+float mean_green = 0;
 void sepia()
 {
   for (int i = 0; i < rows; i++)
@@ -288,12 +256,11 @@ void sepia()
       pic[i][j][2] = (0.272 * out[i][j][0]) + (0.534 * out[i][j][1]) + (0.131 * out[i][j][2]);
       if (pic[i][j][2] >= 255)
         pic[i][j][2] = 255;
+      mean_red += pic[i][j][0];
+      mean_green += pic[i][j][1];
+      mean_blue += pic[i][j][2];
     }
 }
-
-float mean_red = 0;
-float mean_blue = 0;
-float mean_green = 0;
 
 void *mean(void *threadarg)
 {
@@ -314,56 +281,10 @@ void *mean(void *threadarg)
 
 void overall_mean()
 {
-  for (int i = 0; i < rows; i++)
-    for (int j = 0; j < cols; j++)
-    {
-      mean_red += pic[i][j][0];
-      mean_green += pic[i][j][1];
-      mean_blue += pic[i][j][2];
-    }
   mean_red /= rows * cols;
   mean_green /= rows * cols;
   mean_blue /= rows * cols;
-
-  pthread_t threads[NUM_THREADS_MEAN];
-  struct getPixsArgs td[NUM_THREADS_MEAN + 1];
-  int rc;
-  int parts = rows / (NUM_THREADS_MEAN);
-  int start = 0;
-  int i;
-  for (i = 0; i < NUM_THREADS_MEAN; i++)
-  {
-    td[i].row = start;
-    td[i].maxR = start + parts;
-    start += parts;
-    rc = pthread_create(&threads[i], NULL, mean, (void *)&td[i]);
-    if (rc)
-    {
-      cout << "Error:unable to create thread," << rc << endl;
-      exit(-1);
-    }
-  }
-
-  if (rows % (NUM_THREADS_MEAN) != 0)
-  {
-    pthread_t thread;
-
-    td[i].row = start;
-    td[i].maxR = start + (rows % (NUM_THREADS_MEAN));
-    start += parts;
-    td[i].count = cols * i * parts * 3 + 1;
-    rc = pthread_create(&thread, NULL, getPixs, (void *)&td[i]);
-    if (rc)
-    {
-      cout << "Error:unable to create thread," << rc << endl;
-      exit(-1);
-    }
-    pthread_join(thread, NULL);
-  }
-  for (int i = 0; i < NUM_THREADS_MEAN; ++i)
-  {
-    pthread_join(threads[i], NULL);
-  }
+  threading(NUM_THREADS_MEAN, 0, mean);
 }
 
 void cross()
@@ -403,7 +324,6 @@ int main(int argc, char *argv[])
     cout << "File read error" << endl;
     return 1;
   }
-  // read input file
   auto start = high_resolution_clock::now();
   getPixlesFromBMP24(bufferSize, rows, cols, fileBuffer);
   auto stop = high_resolution_clock::now();
