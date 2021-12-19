@@ -94,27 +94,22 @@ void *getPixs(void *threadarg)
 {
   struct getPixsArgs *args;
   args = (struct getPixsArgs *)threadarg;
+  int count = args->count;
+
   for (int i = args->row; i < args->maxR; i++)
   {
-    args->count += args->extra;
+    count += args->extra;
     for (int j = cols - 1; j >= 0; j--)
-      for (int k = 0; k < 3; k++)
-      {
-        switch (k)
-        {
-        case 0:
-          pic[i][j][k] = (unsigned char)args->fileReadBuffer[args->end - args->count];
-          break;
-        case 1:
-          pic[i][j][k] = (unsigned char)args->fileReadBuffer[args->end - args->count];
-          break;
-        case 2:
-          pic[i][j][k] = (unsigned char)args->fileReadBuffer[args->end - args->count];
-          break;
-        }
-        args->count++;
-      }
+    {
+      pic[i][j][0] = (unsigned char)args->fileReadBuffer[args->end - count];
+      count++;
+      pic[i][j][1] = (unsigned char)args->fileReadBuffer[args->end - count];
+      count++;
+      pic[i][j][2] = (unsigned char)args->fileReadBuffer[args->end - count];
+      count++;
+    }
   }
+  pthread_exit(NULL);
 }
 
 void getPixlesFromBMP24(int end, int rows, int cols, char *fileReadBuffer)
@@ -124,7 +119,6 @@ void getPixlesFromBMP24(int end, int rows, int cols, char *fileReadBuffer)
   int rc;
   int parts = rows / NUM_THREADS;
   int start = 0;
-  int count = 1;
   int extra = cols % 4;
   for (int i = 0; i < NUM_THREADS; i++)
   {
@@ -133,7 +127,8 @@ void getPixlesFromBMP24(int end, int rows, int cols, char *fileReadBuffer)
     td[i].row = start;
     td[i].maxR = start + parts;
     start += parts;
-    td[i].count = (cols - 1) * 3 * i;
+    td[i].count = cols * i * 80 * 3 + 1;
+    td[i].fileReadBuffer = fileReadBuffer;
     rc = pthread_create(&threads[i], NULL, getPixs, (void *)&td[i]);
     if (rc)
     {
@@ -141,7 +136,10 @@ void getPixlesFromBMP24(int end, int rows, int cols, char *fileReadBuffer)
       exit(-1);
     }
   }
-  pthread_exit(NULL);
+  for (int i = 0; i < NUM_THREADS; ++i)
+  {
+    pthread_join(threads[i], NULL);
+  }
 }
 
 void writeOutBmp24(char *fileBuffer, const char *nameOfFileToCreate, int bufferSize)
@@ -164,15 +162,15 @@ void writeOutBmp24(char *fileBuffer, const char *nameOfFileToCreate, int bufferS
         {
         case 0:
           // write red value in fileBuffer[bufferSize - count]
-          fileBuffer[bufferSize - count] = (unsigned char)out[i][j][k];
+          fileBuffer[bufferSize - count] = (unsigned char)pic[i][j][k];
           break;
         case 1:
           // write green value in fileBuffer[bufferSize - count]
-          fileBuffer[bufferSize - count] = (unsigned char)out[i][j][k];
+          fileBuffer[bufferSize - count] = (unsigned char)pic[i][j][k];
           break;
         case 2:
           // write blue value in fileBuffer[bufferSize - count]
-          fileBuffer[bufferSize - count] = (unsigned char)out[i][j][k];
+          fileBuffer[bufferSize - count] = (unsigned char)pic[i][j][k];
           break;
           // go to the next position in the buffer
         }
