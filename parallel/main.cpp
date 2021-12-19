@@ -11,9 +11,9 @@ using namespace std::chrono;
 using namespace std;
 
 #define NUM_THREADS_READ 5
-#define NUM_THREADS_SMOOTH 6
+#define NUM_THREADS_SMOOTH 8
 #define NUM_THREADS_SEPIA 5
-#define NUM_THREADS_MEAN 8
+#define NUM_THREADS_MEAN 6
 
 using std::cout;
 using std::endl;
@@ -181,15 +181,13 @@ void *setPixs(void *threadarg)
   {
     count += args->extra;
     for (int j = cols - 1; j >= 0; j--)
-    {
-      c[args->end - count] = (unsigned char)out[i][j][0];
-      count++;
-      c[args->end - count] = (unsigned char)out[i][j][1];
-      count++;
-      c[args->end - count] = (unsigned char)out[i][j][2];
-      count++;
-    }
+      for (int k = 0; k < 3; k++)
+      {
+        c[args->end - count] = (unsigned char)out[i][j][k];
+        count++;
+      }
   }
+
   pthread_exit(NULL);
 }
 
@@ -291,22 +289,19 @@ void cross()
   for (int i = 0; i < rows; i++)
     for (int j = 0; j < cols; j++)
     {
-      if (j == i || j == (cols - i))
+      for (int k = 0; k <= 2; k++)
       {
-        out[i][j][0] = 255.0;
-        out[i][j][1] = 255.0;
-        out[i][j][2] = 255.0;
-        if (i != 0)
+        if (j == i || j == (cols - i))
         {
-          out[i - 1][j][0] = 255.0;
-          out[i - 1][j][1] = 255.0;
-          out[i - 1][j][2] = 255.0;
-        }
-        if (i != rows - 1)
-        {
-          out[i + 1][j][0] = 255.0;
-          out[i + 1][j][1] = 255.0;
-          out[i + 1][j][2] = 255.0;
+          out[i][j][k] = 255.0;
+          if (i != 0)
+          {
+            out[i - 1][j][k] = 255.0;
+          }
+          if (i != rows - 1)
+          {
+            out[i + 1][j][k] = 255.0;
+          }
         }
       }
     }
@@ -317,12 +312,12 @@ int main(int argc, char *argv[])
   char *fileBuffer;
   int bufferSize;
   char *fileName = argv[1];
-  auto first = high_resolution_clock::now();
   if (!fillAndAllocate(fileBuffer, fileName, rows, cols, bufferSize))
   {
     cout << "File read error" << endl;
     return 1;
   }
+  auto first = high_resolution_clock::now();
   getPixlesFromBMP24(bufferSize, rows, cols, fileBuffer);
 
   smoothing();

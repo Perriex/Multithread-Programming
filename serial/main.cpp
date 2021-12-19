@@ -177,17 +177,20 @@ void sepia()
   for (int i = 0; i < rows; i++)
     for (int j = 0; j < cols; j++)
     {
-      pic[i][j][0] = (0.393 * out[i][j][0]) + (0.769 * out[i][j][1]) + (0.189 * out[i][j][2]);
-      if (pic[i][j][0] >= 255)
-        pic[i][j][0] = 255;
+      pic[i][j][0] = (0.393 * out[i][j][0]) + (0.769 * out[i][j][1]) + (0.189 * out[i][j][2]) >= 255 ? 255 : pic[i][j][0] = (0.393 * out[i][j][0]) + (0.769 * out[i][j][1]) + (0.189 * out[i][j][2]);
 
-      pic[i][j][1] = (0.349 * out[i][j][0]) + (0.686 * out[i][j][1]) + (0.168 * out[i][j][2]);
-      if (pic[i][j][1] >= 255)
-        pic[i][j][1] = 255;
+      pic[i][j][1] = (0.349 * out[i][j][0]) + (0.686 * out[i][j][1]) + (0.168 * out[i][j][2]) >= 255 ? 255 : pic[i][j][1] = (0.349 * out[i][j][0]) + (0.686 * out[i][j][1]) + (0.168 * out[i][j][2]);
 
-      pic[i][j][2] = (0.272 * out[i][j][0]) + (0.534 * out[i][j][1]) + (0.131 * out[i][j][2]);
-      if (pic[i][j][2] >= 255)
-        pic[i][j][2] = 255;
+      pic[i][j][2] = (0.272 * out[i][j][0]) + (0.534 * out[i][j][1]) + (0.131 * out[i][j][2]) >= 255 ? 255 : pic[i][j][2] = (0.272 * out[i][j][0]) + (0.534 * out[i][j][1]) + (0.131 * out[i][j][2]);
+    }
+}
+
+void cal_mean(float mean, int k)
+{
+  for (int i = 0; i < rows; i++)
+    for (int j = 0; j < cols; j++)
+    {
+      out[i][j][k] = pic[i][j][k] * 0.4 + mean * 0.6;
     }
 }
 
@@ -204,15 +207,11 @@ void overall_mean()
   mean_red /= rows * cols;
   mean_green /= rows * cols;
   mean_blue /= rows * cols;
-
-  for (int i = 0; i < rows; i++)
-    for (int j = 0; j < cols; j++)
-    {
-      out[i][j][0] = pic[i][j][0] * 0.4 + mean_red * 0.6;
-      out[i][j][1] = pic[i][j][1] * 0.4 + mean_green * 0.6;
-      out[i][j][2] = pic[i][j][2] * 0.4 + mean_blue * 0.6;
-    }
+  cal_mean(mean_red, 0);
+  cal_mean(mean_green, 1);
+  cal_mean(mean_blue, 2);
 }
+
 void cross()
 {
   for (int i = 0; i < rows; i++)
@@ -241,50 +240,24 @@ int main(int argc, char *argv[])
   char *fileBuffer;
   int bufferSize;
   char *fileName = argv[1];
-  auto first = high_resolution_clock::now();
   if (!fillAndAllocate(fileBuffer, fileName, rows, cols, bufferSize))
   {
     cout << "File read error" << endl;
     return 1;
   }
-
-  // read input file
-  auto start = high_resolution_clock::now();
+  auto first = high_resolution_clock::now();
   getPixlesFromBMP24(bufferSize, rows, cols, fileBuffer);
-  auto stop = high_resolution_clock::now();
-  auto duration = duration_cast<microseconds>(stop - start);
-  //cout << "read picture:" << duration.count() << endl;
 
-  // apply filters
-  start = high_resolution_clock::now();
   smoothing();
-  stop = high_resolution_clock::now();
-  duration = duration_cast<microseconds>(stop - start);
-  //cout << "smoothing: " << duration.count() << endl;
 
-  start = high_resolution_clock::now();
   sepia();
-  stop = high_resolution_clock::now();
-  duration = duration_cast<microseconds>(stop - start);
-  //cout << "sepia: " << duration.count() << endl;
 
-  start = high_resolution_clock::now();
   overall_mean();
-  stop = high_resolution_clock::now();
-  duration = duration_cast<microseconds>(stop - start);
-  //cout << "mean: " << duration.count() << endl;
 
-  start = high_resolution_clock::now();
   cross();
-  stop = high_resolution_clock::now();
-  duration = duration_cast<microseconds>(stop - start);
-  //cout << "cross: " << duration.count() << endl;
-  // write output file
-  start = high_resolution_clock::now();
+
   writeOutBmp24(fileBuffer, "output.bmp", bufferSize);
-  stop = high_resolution_clock::now();
-  duration = duration_cast<microseconds>(stop - start);
-  //cout << "write pic:" << duration.count() << endl;
+
   auto last = high_resolution_clock::now();
 
   auto milliseconds = chrono::duration_cast<chrono::milliseconds>(last - first);
